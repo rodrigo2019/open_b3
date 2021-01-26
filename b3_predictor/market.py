@@ -9,9 +9,26 @@ class OrderTypes(IntEnum):
 
 
 class Order:
+    """
+    A order is a request to BUY or SELL some stock in the market.
+    Some order can be executed instantly when the set price is at market, it means that you are going to pay the
+        current price of the market, or you can set a specified price to pay in some stock. Also you can set the
+        take profit (TP) stop loss (SL) values.
+
+    **The current state of this lib don't use a order to close a position, just for opening a new one.**
+    """
     _ticket_counter = 0
 
     def __init__(self, price, sl, tp, volume, order_type):
+        """
+
+        :param price:[float] The price that are going to pay for some stock, set as 0 if you want to buy at market
+            price.
+        :param sl:[float] Stop loss value.
+        :param tp:[float] Take profit value.
+        :param volume:[float] Amount of some stock.
+        :param order_type:[OrderTypes] BUY for long position and SELL for short position.
+        """
         self._price = price
         self._sl = sl
         self._tp = tp
@@ -43,13 +60,28 @@ class Order:
 
     @property
     def ticket(self):
+        """
+        The ticket is an unique ID for order tracking purposes
+        :return: [int] The ID of an order
+        """
         return self._ticket
 
 
 class Position:
+    """
+    A Position it is when you have some stock in your wallet, a position is always created by an executed order, you
+        can have two types of position, short and long. Long position happens when you buy a stock and close the
+        position selling it, in another hand the short position is the opposite of the long, first you need to sell
+        and close it buying.
+    """
     _ticket_counter = 0
 
     def __init__(self, open_order, opened_price):
+        """
+
+        :param open_order: [Order] The order which opened the current position.
+        :param opened_price: [float] The current price when the order was executed.
+        """
         self._open_order = open_order
         self._opened_price = opened_price
         self._last_price = 0
@@ -67,7 +99,12 @@ class Position:
 
     @last_price.setter
     def last_price(self, new_price):
-        assert new_price > 0, "The new price must be a positive value"
+        """
+        The broker must update the last price of the current opened positions.
+        :param new_price: [float] The last price from the market for the stock.
+        :return: [None]
+        """
+        assert new_price > 0, "The new price must be a positive value."
         self._last_price = new_price
 
     @property
@@ -76,6 +113,10 @@ class Position:
 
     @property
     def profit(self):
+        """
+        Calculate the current profit of the position. This property returns the profit in points, not in the currency.
+        :return: [float] The current profit in points.
+        """
         if self._open_order.order_type == OrderTypes.BUY:
             return self._last_price - self._opened_price
         else:
@@ -87,7 +128,20 @@ class Position:
 
 
 class Market(ABC):
+    """
+    This class simulate the market for a single stock. The stock data is read from a CSV file extracted from the
+        metatrader 5. This class doesn't simulate the market ticks, the simulation are based on the maximum and minimums
+        of each bar, and if you go to execute some order at market, the based price will be the open price of the
+        current bar.
+    The Market is responsible for generating values of the stock in each iteration.
+    """
     def __init__(self, csv_file_path, window_size=1):
+        """
+        It is  a iterable class, for each iteration N history bars will be returned to the user. It is really useful
+            for analyzing the past to predict the future.
+        :param csv_file_path: [string] The csv file path with the stock data
+        :param window_size: [int] Number of the past bars that will be returned in each iteration
+        """
         assert window_size > 0, "window_size must be > 0."
         self._window_size = window_size
 
@@ -108,18 +162,10 @@ class Market(ABC):
 
     @property
     def bid(self):
-        """
-        Price that you need to look if you are going to sell.
-        :return:
-        """
         return self._data_frame["close"].values[self._iter]
 
     @property
     def ask(self):
-        """
-        Price that you need to look if you are going to buy.
-        :return:
-        """
         return self._data_frame["close"].values[self._iter] + self._data_frame["spread"].values[self._iter]
 
     @property
@@ -128,15 +174,35 @@ class Market(ABC):
 
     @points2currency.setter
     def points2currency(self, new_value):
+        """
+        In some stocks the current value is not based on the currency, so with this factor we can convert the points
+        value to the currency value.
+        E.g for each 5 points in the WIN stock it equivalent to 1BRL.
+        :param new_value: [float] the factor for convert points to currency.
+        :return: [None]
+        """
         assert new_value >= 0, "points2currency value must be >= 0."
 
     @abstractmethod
     def _broker_callback(self):
+        """
+        For each market iteration the Broker can overload this method to execute specific task in each market iteration.
+        :return: [None]
+        """
         pass
 
 
 class Broker(Market):
+    """
+    The broker is responsible for executing and creating orders
+    """
     def __init__(self, *args, init_deposit=0, **kwargs):
+        """
+
+        :param args: See more information in Market class.
+        :param init_deposit: Initial amount of money.
+        :param kwargs: See more information in Market class.
+        """
         super().__init__(*args, **kwargs)
         self._init_deposit = init_deposit
 
@@ -145,24 +211,48 @@ class Broker(Market):
         self._history_position_list = []
 
     def buy(self, price=0, sl=0, tp=0, volume=1):
+        """
+
+        :param price: [float] The price that you wanna pay in some stock. (0 for buying at market)
+        :param sl: [float] Stop loss price.
+        :param tp: [float] Take profit price.
+        :param volume: [float] Volume to buy.
+        :return: [None]
+        """
         if price == 0:
             self._opened_positions_list.append(Position(Order(price, sl, tp, volume, OrderTypes.BUY), self.ask))
         else:
             self._orders_list.append(Order(price, sl, tp, volume, OrderTypes.BUY))
 
     def sell(self, price=0, sl=0, tp=0, volume=1):
+        """
+
+        :param price: [float] The price that you wanna pay in some stock. (0 for selling at market)
+        :param sl: [float] Stop loss price.
+        :param tp: [float] Take profit price.
+        :param volume: [float] Volume to buy.
+        :return: [None]
+        """
         if price == 0:
             self._opened_positions_list.append(Position(Order(price, sl, tp, volume, OrderTypes.SELL), self.bid))
         else:
             self._orders_list.append(Order(price, sl, tp, volume, OrderTypes.SELL))
 
     def close_all_positions(self):
+        """
+        Close all opened positions.
+        :return: [None]
+        """
         for position in self._opened_positions_list[:]:
             position.last_price = self.bid if position.open_order.order_type == OrderTypes.BUY else self.ask
             self._opened_positions_list.remove(position)
             self._history_position_list.append(position)
 
     def _check_orders(self):
+        """
+        For each market iteration, check if some order must be executed or not.
+        :return: [None]
+        """
         for order in self._orders_list[:]:
             # order.price == 0 means at market
             if order.order_type == OrderTypes.BUY and (self.ask >= order.price or order.price == 0):
@@ -173,8 +263,13 @@ class Broker(Market):
                 self._orders_list.remove(order)
 
     def _check_positions(self):
+        """
+        For each market iteration, check if some position must be closed or not.
+        :return: [None]
+        """
         for position in self._opened_positions_list[:]:
             if position.open_order.order_type == OrderTypes.BUY:
+                position.last_price = self.bid
                 if position.open_order.sl != 0 and position.open_order.sl >= self.bid:
                     position.last_price = position.open_order.sl
                     self._opened_positions_list.remove(position)
@@ -195,30 +290,46 @@ class Broker(Market):
                     self._history_position_list.append(position)
 
     def _broker_callback(self):
+        """
+        Overload the abstract method inherited from Market class
+        :return: [None]
+        """
         self._check_orders()
         self._check_positions()
 
     @property
     def has_order(self):
+        """
+        Check if have a order waiting to be executed.
+        :return: [bool] True if has a opened order, false if not.
+        """
         return True if len(self._orders_list) > 0 else False
 
     @property
     def has_position(self):
+        """
+        Check if have a opened position.
+        :return: [bool] True if has a opened position, false if not.
+        """
         return True if len(self._opened_positions_list) > 0 else False
 
     @property
     def balance(self):
+        """
+        Return the balance of the account in the current currency.
+        :return: [float]
+        """
         return self._init_deposit + sum(
             [position.profit * position.open_order.volume for position in
              self._history_position_list]) / self.points2currency
 
     @property
     def history_positions(self):
+        """
+        A list containing all closed positions.
+        :return: [list[Position]] A list of Positions instances.
+        """
         return self._history_position_list.copy()
-
-    @property
-    def opened_positions(self):
-        return self._opened_positions_list.copy()
 
 
 if __name__ == "__main__":

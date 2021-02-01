@@ -1,0 +1,8 @@
+numpy
+pandas
+tqdm
+opencv-python
+imutils
+metatrader5
+scikit-learn
+tensorflow>=2.3.0

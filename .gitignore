@@ -1,0 +1,7 @@
+# cache and binaries
+__pycache__
+
+# dev environment
+.idea
+.vscode
+*.csv

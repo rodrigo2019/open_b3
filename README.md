@@ -5,14 +5,14 @@
   MetaTrader 5 platform)
 * Execute:
   
-        `cd ./tools
+        cd ./tools
         python get_data_mt5.py
         python generate_dataset.py
-        python preprocess_dataset.py`
+        python preprocess_dataset.py
 * At this point you should have your own dataset ready for training, then execute:
 
-        `cd ../training
-        python train.py`
+        cd ../training
+        python train.py
 
 
 #### Limitations:

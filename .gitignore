@@ -4,4 +4,6 @@ __pycache__
 # dev environment
 .idea
 .vscode
+.env_conf.json
+training/logs
 *.csv

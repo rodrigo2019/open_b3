@@ -1,7 +1,7 @@
 #### Usage:
 * Execute `pip install -r requirements`
 * Copy and rename `.env_conf_template.json` to `.env_conf.json`.
-* Edit `.env_conf.json` using you credentials. (If you don't have any credentials, contact your broker to hire the 
+* Edit `.env_conf.json` using your credentials. (If you don't have any credentials, contact your broker to hire the 
   MetaTrader 5 platform)
 * Execute:
   

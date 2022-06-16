@@ -70,7 +70,7 @@ class ConfusionMatrixTB(Callback):
         self._logdir = logdir
         self._class_names = class_names
         self._data_val = data_val
-        self._file_writer_cm = tf.summary.create_file_writer(self._logdir + '/cm')
+        self._file_writer_cm = tf.summary.create_file_writer(self._logdir + f'/cm_{monitor}')
         self._period = period
         self._monitor = monitor
 

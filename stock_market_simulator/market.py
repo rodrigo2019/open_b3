@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 from enum import IntEnum
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+import stockstats
 
 
 class OrderTypes(IntEnum):
@@ -12,12 +13,12 @@ class OrderTypes(IntEnum):
 
 class Order:
     """
-    A order is a request to BUY or SELL some stock in the market.
+    An order is a request to BUY or SELL some stock in the market.
     Some order can be executed instantly when the set price is at market, it means that you are going to pay the
-        current price of the market, or you can set a specified price to pay in some stock. Also you can set the
+        current price of the market, or you can set a specified price to pay in some stock. Also, you can set the
         take profit (TP) stop loss (SL) values.
 
-    **The current state of this lib don't use a order to close a position, just for opening a new one.**
+    **The current state of this lib don't use an order to close a position, just for opening a new one.**
     """
     _ticket_counter = 0
 
@@ -164,13 +165,15 @@ class Market(ABC):
         metatrader 5. This class doesn't simulate the market ticks, the simulation are based on the maximum and minimums
         of each bar, and if you go to execute some order at market, the based price will be the open price of the
         current bar.
+
     The Market is responsible for generating values of the stock in each iteration.
     """
 
     def __init__(self, csv_file_path, window_size=1):
         """
-        It is  a iterable class, for each iteration N history bars will be returned to the user. It is really useful
+        It is  an iterable class, for each iteration N history bars will be returned to the user. It is really useful
             for analyzing the past to predict the future.
+
         :param csv_file_path: [string] The csv file path with the stock data
         :param window_size: [int] Number of the past bars that will be returned in each iteration
         """
@@ -179,25 +182,72 @@ class Market(ABC):
 
         self._data_frame = pd.read_csv(csv_file_path)
         self._data_frame["time"] = pd.to_datetime(self._data_frame["time"])
-        self._data_frame = self._data_frame.set_index("time")
+        # self._data_frame.set_index("time", inplace=True)
+        self._data_frame.rename(columns={"real_volume": "volume"}, inplace=True)
+        self._data_frame = stockstats.StockDataFrame(self._data_frame)
+        self._data_frame_values = self._data_frame.values
+        self._data_frame_values = self._data_frame_values.transpose((1, 0))
 
         self._points2currency = 1
-        self._iter = 0
+        assert self._window_size < len(self), "window_size too big."
+        self._iter = self._window_size - 1
         self._time = np.datetime64("nat")
 
-    def __iter__(self):
-        for self._iter in range(self._window_size, len(self._data_frame), 1):
-            self._time = self._data_frame.index.values[self._iter]
+    def __next__(self):
+        if self._iter < len(self) - 1:
+            self._iter += 1
+            self._time = self._data_frame_values[0, self._iter]  # 0 is the time index
             self._broker_callback()
-            yield self._data_frame[self._iter - self._window_size:self._iter]
+            return self._data_frame_values[:, self._iter - self._window_size:self._iter]
+        else:
+            raise StopIteration
+
+    def __iter__(self):
+        return self
 
     def __len__(self):
         return len(self._data_frame)
+
+    def add_indicator(self, indicator_name):
+        """
+        Add an indicator to the market.
+
+        :param indicator_name: [string] The indicator to add. https://pypi.org/project/stockstats/ for all available
+            indicators. Use "all" to add all indicators.
+        :return: [pandas.Series] The indicator values.
+        """
+        try:
+            if indicator_name == "all":
+                self._data_frame.init_all()
+                return self._data_frame
+            return self._data_frame[indicator_name]
+        finally:
+            self._data_frame_values = self._data_frame.values
+            self._data_frame_values = self._data_frame_values.transpose((1, 0))
+
+    def drop_feature(self, feature):
+        self._data_frame.drop(feature, axis=1, inplace=True)
+        self._data_frame_values = self._data_frame.values
+        self._data_frame_values = self._data_frame_values.transpose((1, 0))
+
+    @property
+    def iter(self):
+        return self._iter
+
+    @property
+    def columns(self):
+        """
+        Describes all columns added into the dataframe, useful to know the position from added indicators.
+
+        :return: [List[String]] The list of all columns added into the dataframe.
+        """
+        return {x: i for i, x in enumerate(list(self._data_frame.columns))}
 
     @property
     def bid(self):
         """
         Price that you need to look if you are going to sell.
+
         :return:
         """
         return self._data_frame["close"].values[self._iter]
@@ -206,6 +256,7 @@ class Market(ABC):
     def ask(self):
         """
         Price that you need to look if you are going to buy.
+
         :return:
         """
         return self._data_frame["close"].values[self._iter] + self._data_frame["spread"].values[self._iter]
@@ -213,7 +264,8 @@ class Market(ABC):
     @property
     def time(self):
         """
-        Timestamp from the last iteration bar
+        Timestamp from the last iteration bar.
+
         :return: [numpy.datetime64]
         """
         return self._time
@@ -227,7 +279,8 @@ class Market(ABC):
         """
         In some stocks the current value is not based on the currency, so with this factor we can convert the points
         value to the currency value.
-        E.g for each 5 points in the WIN stock it equivalent to 1BRL.
+        E.g. for each 5 points in the WIN stock it equivalent to 1BRL.
+
         :param new_value: [float] the factor for convert points to currency.
         :return: [None]
         """
@@ -237,6 +290,7 @@ class Market(ABC):
     def _broker_callback(self):
         """
         For each market iteration the Broker can overload this method to execute specific task in each market iteration.
+
         :return: [None]
         """
         pass
@@ -274,7 +328,7 @@ class Broker(Market):
     def buy(self, price=0, sl=0, tp=0, volume=1):
         """
 
-        :param price: [float] The price that you wanna pay in some stock. (0 for buying at market)
+        :param price: [float] The price that you want to pay in some stock. (0 for buying at market)
         :param sl: [float] Stop loss price.
         :param tp: [float] Take profit price.
         :param volume: [float] Volume to buy.
@@ -289,7 +343,7 @@ class Broker(Market):
     def sell(self, price=0, sl=0, tp=0, volume=1):
         """
 
-        :param price: [float] The price that you wanna pay in some stock. (0 for selling at market)
+        :param price: [float] The price that you want to pay in some stock. (0 for selling at market)
         :param sl: [float] Stop loss price.
         :param tp: [float] Take profit price.
         :param volume: [float] Volume to buy.
@@ -312,6 +366,17 @@ class Broker(Market):
             self._opened_positions_list.remove(position)
             self._history_position_list.append(position)
 
+    def reset(self):
+        """
+        Reset the broker state.
+
+        :return: [None]
+        """
+        self._orders_list = []
+        self._opened_positions_list = []
+        self._history_position_list = []
+        self._iter = self._window_size - 1
+
     def _check_orders(self):
         """
         For each market iteration, check if some order must be executed or not.
@@ -326,6 +391,12 @@ class Broker(Market):
                 self._opened_positions_list.append(Position(order, self.bid, self._time))
                 self._orders_list.remove(order)
 
+    def _close_position(self, position, price):
+        position.last_price = price
+        position.close_time = self._time
+        self._opened_positions_list.remove(position)
+        self._history_position_list.append(position)
+
     def _check_positions(self):
         """
         For each market iteration, check if some position must be closed or not.
@@ -335,27 +406,15 @@ class Broker(Market):
             if position.open_order.order_type == OrderTypes.BUY:
                 position.last_price = self.bid
                 if position.open_order.sl != 0 and position.open_order.sl >= self.bid:
-                    position.last_price = position.open_order.sl
-                    position.close_time = self._time
-                    self._opened_positions_list.remove(position)
-                    self._history_position_list.append(position)
+                    self._close_position(position, position.open_order.sl)
                 elif position.open_order.tp != 0 and position.open_order.tp <= self.bid:
-                    position.last_price = position.open_order.tp
-                    position.close_time = self._time
-                    self._opened_positions_list.remove(position)
-                    self._history_position_list.append(position)
+                    self._close_position(position, position.open_order.tp)
             else:
                 position.last_price = self.ask
                 if position.open_order.sl != 0 and position.open_order.sl <= self.ask:
-                    position.last_price = position.open_order.sl
-                    position.close_time = self._time
-                    self._opened_positions_list.remove(position)
-                    self._history_position_list.append(position)
+                    self._close_position(position, position.open_order.sl)
                 elif position.open_order.tp != 0 and position.open_order.tp >= self.ask:
-                    position.last_price = position.open_order.tp
-                    position.close_time = self._time
-                    self._opened_positions_list.remove(position)
-                    self._history_position_list.append(position)
+                    self._close_position(position, position.open_order.tp)
 
     def _broker_callback(self):
         """
@@ -368,8 +427,8 @@ class Broker(Market):
     @property
     def has_order(self):
         """
-        Check if have a order waiting to be executed.
-        :return: [bool] True if has a opened order, false if not.
+        Check if an order waiting to be executed.
+        :return: [bool] True if an opened order exist, false if not.
         """
         return True if len(self._orders_list) > 0 else False
 
@@ -377,7 +436,7 @@ class Broker(Market):
     def has_position(self):
         """
         Check if have a opened position.
-        :return: [bool] True if has a opened position, false if not.
+        :return: [bool] True if an opened position exist, false if not.
         """
         return True if len(self._opened_positions_list) > 0 else False
 
@@ -405,22 +464,21 @@ class Broker(Market):
 
 
 if __name__ == "__main__":
-    broker = Broker(csv_file_path="../datasets/WIN$N_m5.csv", window_size=20)
-    broker.points2currency = 5
-
     from tqdm import tqdm
     import random
 
+    broker = Broker(csv_file_path="../data/ABEV3_d1.csv", window_size=60)
+    broker.points2currency = 1
+    broker.add_indicator("all")
+    print(broker.columns)
+
     for data in tqdm(broker):
-        if random.randint(0, 100) == 0 and not broker.has_position:
+        if random.randint(0, 1) == 0 and not broker.has_position:
             if random.random() > 0.5:
                 _price = broker.ask
-                broker.buy(sl=_price - 100, tp=_price + 100)
+                broker.buy(sl=_price - 0.1, tp=_price + 0.1)
             else:
                 _price = broker.bid
-                broker.sell(sl=_price + 100, tp=_price - 100)
-        if len(broker.history_positions) > 10:
-            break
+                broker.sell(sl=_price + 0.1, tp=_price - 0.1)
 
-    debug = broker.history_positions
-    print("finish")
+    print("finish", broker.balance, len(broker.history_positions))

@@ -10,3 +10,11 @@ stockstats
 gym
 plotly
 quantstats
+matplotlib
+flask
+gevent
+requests
+optuna
+stable-baselines3
+pygad
+optuna

@@ -33,7 +33,7 @@ def run_broker(path, window_size, tp_factor, sl_factor):
         candles inside of the window size.
     :return: [tuple[list[pandas.Dataframe], list[b3_predictor.Position]]]
     """
-    broker = Broker(csv_file_path=path, window_size=window_size, ignore_spread=True)
+    broker = Broker(data_frame=path, window_size=window_size, ignore_spread=True)
     broker.add_indicator("close_21_sma")
     broker.add_indicator("macd")
 

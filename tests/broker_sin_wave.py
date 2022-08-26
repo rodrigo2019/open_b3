@@ -10,7 +10,7 @@ BUY_BELOW = 6
 CSV_PATH = "../data/sin_wave_sample.csv"
 
 qs.extend_pandas()
-broker = Broker(csv_file_path=CSV_PATH, window_size=5)
+broker = Broker(data_frame=CSV_PATH, window_size=5)
 broker.points2currency = 1
 print(broker.columns)
 

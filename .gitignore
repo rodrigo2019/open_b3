@@ -6,4 +6,9 @@ __pycache__
 .vscode
 .env_conf.json
 training/classification/logs
+training/drl/trains
 *.csv
+*.log
+*.log.*
+*.h5
+*.db
